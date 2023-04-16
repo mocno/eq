@@ -42,6 +42,11 @@ class Sentence:
             self.sentence = self.sentence[:index] + self.sentence[index+1:]
         self.parsed = False
 
+    def set(self, sentence: str):
+        """Define new sentence and parse it"""
+        self.sentence = sentence
+        self.parse()
+
     def parse(self):
         """Parse the sentence"""
 
@@ -136,9 +141,7 @@ class Universe:
         before_index = self.sentences[self.selected].sentence[:index]
         after_index  = self.sentences[self.selected].sentence[index:]
 
-        new_sentence = Sentence(before_index)
-        self.sentences[self.selected] = Sentence(after_index)
-        self.sentences[self.selected].parse()
+        self.sentences[self.selected].set(before_index)
 
-        self.sentences.insert(self.selected, new_sentence)
         self.selected += 1
+        self.sentences.insert(self.selected, Sentence(after_index))
