@@ -2,6 +2,7 @@
 
 import re
 import pygame
+from . import parser
 
 # temp regex
 DOT_RE = re.compile(r'^\((?P<x>\d+),(?P<y>\d+)\)$')
@@ -11,11 +12,7 @@ class Sentence:
     def __init__(self, sentence: str="") -> None:
         self.sentence = sentence
         self.parsed = False
-
-        self.data = None
-
-        self.dot = None
-        self.value = None
+        self.error_data: bool|dict[str,int] = False
 
     def __str__(self):
         return self.sentence
@@ -54,37 +51,35 @@ class Sentence:
             self.parsed = True
 
             if self.sentence != '':
-                # print('parsing:', self.sentence)
+                print('parsing:', self.sentence)
 
-                match = DOT_RE.match(self.sentence)
-                if match is not None:
-                    dot_x, dot_y = match.groups('xy')
+                lexer = parser.Lexer(self.sentence)
 
-                    self.data = {
-                        'type': 'DOT',
-                        'x': int(dot_x),
-                        'y': int(dot_y)
-                    }
+                try:
+                    tokens = lexer.make_tokens()
+                except parser.IllegalCharError as error:
+                    print("Error", error.index)
+                    self.error_data = { 'position': error.index, 'length': 1 }
                     return
 
-            self.data = None
+                try:
+                    parsed = parser.Parser(tokens)
+                    ast = parsed.parse()
+                except parser.InvalidSyntaxError as error:
+                    print("Error", error)
+                    if error.token is not None:
+                        self.error_data = { 'position': error.token.position, 'length': error.token.length }
+                    else:
+                        self.error_data = True
+                    return
+
+                print(ast)
+
+                self.error_data = False
 
     def draw(self, canvas: pygame.Surface, canvas_position: pygame.Rect|tuple, \
              graph_position: pygame.Vector2, graph_scale: float):
         """Draw the element in canvas"""
-        if self.data is None:
-            return
-
-        canvas_x, canvas_y, width, height = canvas_position
-
-        if self.data['type'] == 'DOT':
-            dot_x, dot_y = self.data['x'], self.data['y']
-
-            if 0 < (dot_x- graph_position.x) * graph_scale - canvas_x < width and \
-               0 < -(dot_y+graph_position.y) * graph_scale - canvas_y < height:
-                pygame.draw.circle(canvas, 'red', \
-                    (((dot_x,-dot_y) - graph_position) * graph_scale), 4)
-
 
 class Universe:
     """Universe instance, handle the sentences."""

@@ -30,7 +30,7 @@ class Screen:
         self.sentence_cursor_pos: int = 0
         self.dragging = None
 
-        self.universe.get_selected().append("(1,2)", 0)
+        self.universe.get_selected().append("1+x^2/3", 0)
 
     def __repr__(self) -> str:
         cls = self.__class__
@@ -38,7 +38,7 @@ class Screen:
         return f"{cls.__name__}({self.canvas.get_width()}, {self.canvas.get_height()})"
 
     def start(self):
-        """Start the screen, """
+        """Start the screen"""
 
         self.running = True
 
@@ -145,7 +145,7 @@ class Screen:
             self.sentence_cursor_pos = 0
 
         elif event.unicode != '' and ( \
-            event.unicode.isalpha() or event.unicode.isnumeric() or event.unicode in '=-+/^><(),' \
+            event.unicode.isalpha() or event.unicode.isnumeric() or event.unicode in '=-+*/^><(),' \
         ):
             self.universe.get_selected().append(event.unicode, self.sentence_cursor_pos)
             self.sentence_cursor_pos += 1
@@ -176,11 +176,29 @@ class Screen:
         pygame.draw.rect(self.canvas, 'gray', cursor_position)
 
         for index, sentence in enumerate(self.universe):
-            text = self.font.render(str(sentence), True, 'black')
+            text = str(sentence)
 
-            if sentence.data is None and str(sentence) != "":
-                pygame.draw.rect(self.canvas, 'red', (7, tab_y + 40 * index + 20, 2, 30))
+            if sentence.error_data is not False:
+                if isinstance(sentence.error_data, dict) and \
+                   sentence.error_data['position'] < len(text):
+                    before_error = text[:sentence.error_data['position']]
+                    error_x = self.font.render(before_error, False, 'black').get_width()
+
+                    error_content = text[
+                        sentence.error_data['position']: \
+                        sentence.error_data['position']+sentence.error_data['length']
+                    ]
+                    error_width = self.font.render(error_content, False, 'black').get_width()
+
+                    error_position = (error_x +20, tab_y + 40 * index + 52, error_width, 3)
+                else:
+                    error_position = (7, tab_y + 40 * index + 20, 2, 30)
+
+                pygame.draw.rect(self.canvas, 'red', error_position)
+
+            text = self.font.render(text, True, 'black')
             self.canvas.blit(text, (tab_x + 20, tab_y + 40 * index + 20))
+
 
     def _draw_graph(self, rect: pygame.Rect):
         pygame.draw.rect(self.canvas, 'white', rect)
