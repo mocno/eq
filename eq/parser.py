@@ -14,6 +14,8 @@ TT_LPAREN = 'LP'
 TT_RPAREN = 'RP'
 TT_VAR    = 'VAR'
 TT_EOF    = 'EOF'
+TT_DEF    = 'DEF'
+TT_SEP    = 'SEP'
 
 class Token:
     """Token to parse the sentences"""
@@ -96,12 +98,11 @@ class Lexer:
         tokens = []
 
         while self.current_char is not None:
-
             if self.current_char in DIGITS:
                 tokens.append(self.make_numbers())
                 continue
 
-            elif self.current_char in ALPHABET:
+            elif self.current_char.lower() in ALPHABET:
                 tokens.append(self.make_var())
                 continue
 
@@ -117,13 +118,13 @@ class Lexer:
                 tokens.append(Token(TT_LPAREN, self.index))
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, self.index))
+            elif self.current_char == ',':
+                tokens.append(Token(TT_SEP, self.index))
             elif self.current_char == '^':
                 tokens.append(Token(TT_POWER, self.index))
-            elif self.current_char == '²':
-                tokens.append(Token(TT_POWER, self.index, 2))
-            elif self.current_char == '³':
-                tokens.append(Token(TT_POWER, self.index, 3))
-            else:
+            elif self.current_char == ':':
+                tokens.append(Token(TT_DEF, self.index))
+            elif self.current_char != ' ':
                 raise IllegalCharError(f"Unexpected char: '{self.current_char}'", index=self.index)
 
             self.advance()
@@ -157,7 +158,7 @@ class Lexer:
         var_name = ''
         position = self.index
 
-        while self.current_char is not None and self.current_char in ALPHABET + DIGITS:
+        while self.current_char is not None and self.current_char.lower() in ALPHABET + DIGITS:
             var_name += self.current_char
             self.advance()
 
@@ -187,23 +188,41 @@ class VariableNode(GenericNode):
 class BinaryOperatorNode(GenericNode):
     """Binary operator node of AST"""
 
-    def __init__(self, left_node, operator: Token, right_node) -> None:
+    def __init__(self, left_node: GenericNode, operator: Token, right_node: GenericNode) -> None:
         self.left_node = left_node
         self.operator = operator
         self.right_node = right_node
 
     def __str__(self) -> str:
-        return f"({self.left_node},{self.operator},{self.right_node})"
+        return f"[{self.left_node},{self.operator},{self.right_node}]"
 
 class UnaryOperatorNode(GenericNode):
     """Unary operator node of AST"""
 
-    def __init__(self, operator: Token, node) -> None:
+    def __init__(self, operator: Token, node: GenericNode) -> None:
         self.operator = operator
         self.node = node
 
     def __str__(self) -> str:
         return f"[{self.operator},{self.node}]"
+
+class DotNode(GenericNode):
+    """Dot node of AST"""
+
+    def __init__(self, dot_x: GenericNode, dot_y: GenericNode) -> None:
+        self.dot_x = dot_x
+        self.dot_y = dot_y
+
+    def __str__(self) -> str:
+        return f"[{self.dot_x},{self.dot_y}]"
+
+class DefineNode(GenericNode):
+    def __init__(self, name: Token, value: GenericNode) -> None:
+        self.name = name
+        self.value = value
+
+    def __str__(self) -> str:
+        return f"[{self.name}: {self.value}]"
 
 class Parser:
     """Create AST to parser the math sentences"""
@@ -223,12 +242,54 @@ class Parser:
         else:
             self.current_token = None
 
-        return self.current_token
+    def parse_sentence(self) -> GenericNode:
+        """
+        Try to parse the tokens of sentence
+        formats:
+            (VAR)(DEF)[sentence]  
+            [sentence]
+        """
 
-    def parse(self) -> GenericNode:
-        """Try parse the tokens of sentence"""
+        if len(self.tokens) >= 3 and \
+            self.tokens[0].type == TT_VAR and self.tokens[1].type == TT_DEF:
+            name = self.tokens[0]
+            self.advance()
+            self.advance()
 
-        res = self.expr()
+            return DefineNode(name, self.sentence())
+
+        return self.sentence()
+
+    def sentence(self) -> GenericNode:
+        """
+        Try to parse the tokens of sentence
+        formats:
+            (VAR)(DEF)[expr]  
+            (LPAREN) [expr] (SEP) [expr] (RPAREN)  
+            (LPAREN) [expr] (RPAREN)  
+            [expr]
+        """
+
+        if self.current_token is not None:
+            if self.current_token.type == TT_LPAREN:
+                self.advance()
+                res = self.expr()
+
+                if self.current_token.type == TT_SEP:
+                    x_dot = res
+                    self.advance()
+                    y_dot = self.expr()
+
+                    res = DotNode(x_dot, y_dot)
+
+                if self.current_token.type != TT_RPAREN:
+                    raise InvalidSyntaxError("Expected ')'", token=self.current_token)
+
+                self.advance()
+            else:
+                res = self.expr()
+        else:
+            res = self.expr()
 
         if self.current_token is None or self.current_token.type != TT_EOF:
             raise InvalidSyntaxError("Expected '+', '-', '*', '/'", token=self.current_token)
@@ -236,7 +297,7 @@ class Parser:
         return res
 
     def expr(self) -> GenericNode:
-        """Try parse an expr in tokens, format:
+        """Try to parse an expr in tokens, format:
         [factor] ((PLUS|MINUS) [factor])*
         """
 
@@ -251,7 +312,7 @@ class Parser:
         return current
 
     def term(self) -> GenericNode:
-        """Try parse a term in tokens, format:
+        """Try to parse a term in tokens, format:
         [factor] ((MUL|DIV) [factor])*
         """
 
@@ -266,7 +327,7 @@ class Parser:
         return current
 
     def factor(self) -> GenericNode:
-        """Try parse a factor in tokens, format:
+        """Try to parse a factor in tokens, format:
         [atom] ((POWER) [factor])*
         """
 
@@ -281,7 +342,7 @@ class Parser:
         return current
 
     def atom(self):
-        """Try parse a atom in tokens, formats:
+        """Try to parse a atom in tokens, formats:
             (PLUS|MINUS) [factor]  
             (LPAREN) [expr] (RPAREN)  
             (FLOAT|INT)  
@@ -319,3 +380,61 @@ class Parser:
             return var
 
         raise InvalidSyntaxError("Unexpected factor", token=self.current_token)
+
+class GenericValue:
+    """Generic value to handle values"""
+
+class NumericValue(GenericValue):
+    """Create a numeric value"""
+
+    def __init__(self, value: GenericNode) -> None:
+        self.value = value
+
+    def mul(self, value):
+        print(value, '*', value)
+
+class DotValue(GenericValue):
+    """Crate a dot"""
+
+    def __init__(self, dot_x: NumericValue, dot_y: NumericValue) -> None:
+        self.dot_x = dot_x
+        self.dot_y = dot_y
+
+class Interpreter:
+    """interpret AST to parser the math sentences"""
+
+    NO_NAME_VARNAME = '__@no name@__'
+
+    def __init__(self) -> None:
+        self.vars: dict = {self.NO_NAME_VARNAME: []}
+
+    def visit(self, ast) -> GenericValue | None:
+        """Parse the ast and returns values, if exists"""
+
+        if isinstance(ast, NumberNode):
+            return NumericValue(ast)
+        elif isinstance(ast, VariableNode):
+            print('Variable', ast.token)
+        elif isinstance(ast, BinaryOperatorNode):
+            print('BinaryOperator', ast.left_node, ast.operator, ast.right_node)
+        elif isinstance(ast, UnaryOperatorNode):
+            value = NumericValue(ast.node)
+            if ast.operator.value == TT_MINUS:
+                value.mul(-1)
+            return value
+        elif isinstance(ast, DotNode):
+            return DotValue(NumericValue(ast.dot_x), NumericValue(ast.dot_y))
+        elif isinstance(ast, DefineNode):
+            value = self.visit(ast.value)
+            self.vars[ast.name.value] = value
+            return value
+
+    def parse_ast(self, ast):
+        """Parse the ast, but it doesn't return"""
+
+        self.visit(ast)
+
+    def clear(self):
+        """Clear variables"""
+
+        self.vars = {}

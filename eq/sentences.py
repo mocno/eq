@@ -1,18 +1,25 @@
-""""""
+"""This script handle the sentences and the parsers"""
 
 import re
+from typing import TypedDict
 import pygame
 from . import parser
+
 
 # temp regex
 DOT_RE = re.compile(r'^\((?P<x>\d+),(?P<y>\d+)\)$')
 
+ErrorData = TypedDict('Point2D', position=int, length=int, msg=str)
+
 class Sentence:
     """Some mathematical sentence, this instance parses and graphs it"""
     def __init__(self, sentence: str="") -> None:
-        self.sentence = sentence
+        self.sentence: str = sentence
+
+        self.ast: None|parser.GenericNode = None
         self.parsed = False
-        self.error_data: bool|dict[str,int] = False
+
+        self.error_data: bool|ErrorData = False
 
     def __str__(self):
         return self.sentence
@@ -29,6 +36,7 @@ class Sentence:
 
         self.sentence = self.sentence[:index] + content + self.sentence[index:]
         self.parsed = False
+        self.ast = None
 
     def pop(self, index=None):
         """Remove char of index, default index is the last char."""
@@ -38,48 +46,52 @@ class Sentence:
         else:
             self.sentence = self.sentence[:index] + self.sentence[index+1:]
         self.parsed = False
+        self.ast = None
 
     def set(self, sentence: str):
         """Define new sentence and parse it"""
         self.sentence = sentence
-        self.parse()
+        self.parsed = False
 
-    def parse(self):
+    def parse_ast(self):
         """Parse the sentence"""
 
         if not self.parsed:
             self.parsed = True
 
             if self.sentence != '':
-                print('parsing:', self.sentence)
-
                 lexer = parser.Lexer(self.sentence)
 
                 try:
                     tokens = lexer.make_tokens()
                 except parser.IllegalCharError as error:
-                    print("Error", error.index)
-                    self.error_data = { 'position': error.index, 'length': 1 }
+                    self.error_data = ErrorData(
+                        position=error.index,
+                        length=1,
+                        msg=str(error)
+                    )
+
+                    print(self.error_data)
                     return
 
                 try:
                     parsed = parser.Parser(tokens)
-                    ast = parsed.parse()
+                    ast = parsed.parse_sentence()
                 except parser.InvalidSyntaxError as error:
-                    print("Error", error)
                     if error.token is not None:
-                        self.error_data = { 'position': error.token.position, 'length': error.token.length }
+                        self.error_data = ErrorData(
+                            position=error.token.position,
+                            length=error.token.length,
+                            msg=str(error)
+                        )
                     else:
                         self.error_data = True
+
+                    print(self.error_data)
                     return
 
-                print(ast)
-
+                self.ast = ast
                 self.error_data = False
-
-    def draw(self, canvas: pygame.Surface, canvas_position: pygame.Rect|tuple, \
-             graph_position: pygame.Vector2, graph_scale: float):
-        """Draw the element in canvas"""
 
 class Universe:
     """Universe instance, handle the sentences."""
@@ -87,6 +99,7 @@ class Universe:
     def __init__(self) -> None:
         self.sentences: list[Sentence] = [Sentence()]
         self.selected: int = 0
+        self.interpreter = parser.Interpreter()
 
     def __iter__(self):
         yield from self.sentences
@@ -117,8 +130,8 @@ class Universe:
 
     def parse_selected(self):
         """Parse the selected sentence"""
-
-        self.sentences[self.selected].parse()
+        self.sentences[self.selected].parse_ast()
+        self.interpret_asts()
 
     def join_with_next(self):
         """
@@ -137,6 +150,22 @@ class Universe:
         after_index  = self.sentences[self.selected].sentence[index:]
 
         self.sentences[self.selected].set(before_index)
+        self.sentences[self.selected].parse_ast()
+
+        self.interpret_asts()
 
         self.selected += 1
         self.sentences.insert(self.selected, Sentence(after_index))
+
+    def interpret_asts(self):
+        """Generates an interpreter and interpreter the ast's"""
+        self.interpreter.clear()
+        for sentence in self.sentences:
+            if sentence.ast is not None:
+                self.interpreter.parse_ast(sentence.ast)
+
+    def draw(self, canvas: pygame.Surface, canvas_position: pygame.Rect|tuple, \
+             graph_position: pygame.Vector2, graph_scale: float):
+        """Draw the elements in canvas"""
+
+        # self.interpreter.vars

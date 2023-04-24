@@ -30,8 +30,6 @@ class Screen:
         self.sentence_cursor_pos: int = 0
         self.dragging = None
 
-        self.universe.get_selected().append("1+x^2/3", 0)
-
     def __repr__(self) -> str:
         cls = self.__class__
 
@@ -145,10 +143,21 @@ class Screen:
             self.sentence_cursor_pos = 0
 
         elif event.unicode != '' and ( \
-            event.unicode.isalpha() or event.unicode.isnumeric() or event.unicode in '=-+*/^><(),' \
+            event.unicode.isalpha() or event.unicode.isnumeric() or event.unicode in '=-+*/^><(),: ' \
         ):
-            self.universe.get_selected().append(event.unicode, self.sentence_cursor_pos)
-            self.sentence_cursor_pos += 1
+            char = event.unicode
+
+            if char == '²':
+                char = '^2'
+                self.universe.get_selected().append(char, self.sentence_cursor_pos)
+                self.sentence_cursor_pos += 2
+            elif char == '³':
+                char = '^3'
+                self.universe.get_selected().append(char, self.sentence_cursor_pos)
+                self.sentence_cursor_pos += 2
+            else:
+                self.universe.get_selected().append(char, self.sentence_cursor_pos)
+                self.sentence_cursor_pos += 1
 
     def _draw(self):
         window_width, window_height = self.canvas.get_width(), self.canvas.get_height()
@@ -219,5 +228,4 @@ class Screen:
             else:
                 pygame.draw.line(self.canvas, 'gray', (rect.left, grid_y), (rect.right, grid_y))
 
-        for sentence in self.universe:
-            sentence.draw(self.canvas, rect, self.graph_position, self.graph_scale)
+        self.universe.draw(self.canvas, rect, self.graph_position, self.graph_scale)
