@@ -1,13 +1,8 @@
 """This script handle the sentences and the parsers"""
 
 import re
-from typing import TypedDict
-import pygame
+from typing import TypedDict, List, Union
 from . import parser
-
-
-# temp regex
-DOT_RE = re.compile(r'^\((?P<x>\d+),(?P<y>\d+)\)$')
 
 ErrorData = TypedDict('Point2D', position=int, length=int, msg=str)
 
@@ -16,10 +11,10 @@ class Sentence:
     def __init__(self, sentence: str="") -> None:
         self.sentence: str = sentence
 
-        self.ast: None|parser.GenericNode = None
+        self.ast: Union[parser.GenericNode, None] = None
         self.parsed = False
 
-        self.error_data: bool|ErrorData = False
+        self.error_data: Union[ErrorData, bool] = False
 
     def __str__(self):
         return self.sentence
@@ -97,7 +92,7 @@ class Universe:
     """Universe instance, handle the sentences."""
 
     def __init__(self) -> None:
-        self.sentences: list[Sentence] = [Sentence()]
+        self.sentences: List[Sentence] = [Sentence()]
         self.selected: int = 0
         self.interpreter = parser.Interpreter()
 

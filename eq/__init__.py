@@ -213,7 +213,8 @@ class Screen:
             self.sentence_cursor_pos = 0
 
         elif event.unicode != '' and ( \
-            event.unicode.isalpha() or event.unicode.isnumeric() or event.unicode in '=-+*/^><(),: ' \
+            event.unicode.isalpha() or event.unicode.isnumeric() or \
+            event.unicode in '=-+*/^><(),: '
         ):
             char = event.unicode
 

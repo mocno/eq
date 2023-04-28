@@ -1,5 +1,7 @@
 """Parser of sentences (not working yet)"""
 
+from typing import List
+
 DIGITS = '0123456789'
 ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
 
@@ -79,8 +81,8 @@ class UndefinedVariableError(GenericParseError):
 
     NAME = 'UndefinedVariableError'
 
-    def __init__(self, var_name: str) -> None:
-        msg = f'Undefined variable: "{var_name}"'
+    def __init__(self, token: Token) -> None:
+        msg = f'Undefined variable: "{token.value}"'
 
         super().__init__(msg)
 
@@ -89,10 +91,15 @@ class UnexpectedVariableTypeError(GenericParseError):
 
     NAME = 'UnexpectedVariableTypeError'
 
-    def __init__(self, expected_type: str, var_name: str) -> None:
-        msg = f'Unexpected variable type, expected {expected_type} of variable "{var_name}"'
+    def __init__(self, expected_type: str, token: Token) -> None:
+        msg = f'Unexpected variable type, expected {expected_type} of variable "{token.value}"'
 
         super().__init__(msg)
+
+class InternalInterpreterError(GenericParseError):
+    """Interpreter error"""
+
+    NAME = 'InternalInterpreterError'
 
 class Lexer:
     """Tokenize the sentence"""
@@ -122,11 +129,11 @@ class Lexer:
                 tokens.append(self.make_numbers())
                 continue
 
-            elif self.current_char.lower() in ALPHABET:
+            if self.current_char.lower() in ALPHABET:
                 tokens.append(self.make_var())
                 continue
 
-            elif self.current_char == '+':
+            if self.current_char == '+':
                 tokens.append(Token(TT_PLUS, self.index))
             elif self.current_char == '-':
                 tokens.append(Token(TT_MINUS, self.index))
@@ -156,21 +163,21 @@ class Lexer:
         """Create number token (INT and FLOAT)"""
 
         num_str = ''
-        dot_count = 0
+        has_dot = False
         position = self.index
 
         while self.current_char is not None and self.current_char in DIGITS + '.':
             if self.current_char == '.':
-                if dot_count == 1:
+                if has_dot:
                     break
-                dot_count += 1
+                has_dot = True
             num_str += self.current_char
             self.advance()
 
-        if dot_count == 0:
+        if has_dot == 0:
             return Token(TT_INT, position, int(num_str), length=len(num_str))
-        else:
-            return Token(TT_FLOAT, position, float(num_str), length=len(num_str))
+
+        return Token(TT_FLOAT, position, float(num_str), length=len(num_str))
 
     def make_var(self):
         """Create number token (VAR)"""
@@ -248,7 +255,7 @@ class DefineNode(GenericNode):
 
 class Parser:
     """Create AST to parser the math sentences"""
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(self, tokens: List[Token]) -> None:
         self.tokens = tokens
         self.index = -1
         self.current_token = None
@@ -385,7 +392,8 @@ class Parser:
 
             if self.current_token.type != TT_RPAREN:
                 raise InvalidSyntaxError("Expected ')'", token=self.current_token)
-            elif expr is None:
+
+            if expr is None:
                 raise InvalidSyntaxError("Unexpected ')'", token=self.current_token)
 
             self.advance()
@@ -419,16 +427,18 @@ class NumericValue(GenericValue):
     def _visit(self, node: GenericNode, interpreter: 'Interpreter'):
         if isinstance(node, NumberNode):
             return node.token.value
+
         if isinstance(node, VariableNode):
             if node.token.value not in interpreter.vars:
-                raise UndefinedVariableError(str(node.token.value))
+                raise UndefinedVariableError(node.token)
 
             value = interpreter.vars[node.token.value]
 
             if not isinstance(value, NumericValue):
-                raise UnexpectedVariableTypeError('NumericValue', str(node.token.value))
+                raise UnexpectedVariableTypeError('NumericValue', node.token)
 
             return value.get_value(interpreter)
+
         if isinstance(node, BinaryOperatorNode):
             left_value = self._visit(node.left_node, interpreter)
             right_value = self._visit(node.right_node, interpreter)
@@ -443,11 +453,18 @@ class NumericValue(GenericValue):
                 return left_value / right_value
             if node.operator.type == TT_POWER:
                 return left_value ** right_value
+
         if isinstance(node, UnaryOperatorNode):
             if node.operator.type == TT_PLUS:
-                return self._visit(node.node, interpreter)
-            if node.operator.type == TT_MINUS:
-                return -self._visit(node.node, interpreter)
+                value = self._visit(node.node, interpreter)
+            elif node.operator.type == TT_MINUS:
+                value = -self._visit(node.node, interpreter)
+            else:
+                raise InternalInterpreterError("Unexpected node operator type")
+
+            return value
+
+        raise InternalInterpreterError("Unexpected node type")
 
     def __str__(self) -> str:
         return f"<{self.value}>"
