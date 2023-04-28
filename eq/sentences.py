@@ -163,9 +163,3 @@ class Universe:
         for sentence in self.sentences:
             if sentence.ast is not None:
                 self.interpreter.parse_ast(sentence.ast)
-
-    def draw(self, canvas: pygame.Surface, canvas_position: pygame.Rect|tuple, \
-             graph_position: pygame.Vector2, graph_scale: float):
-        """Draw the elements in canvas"""
-
-        # self.interpreter.vars

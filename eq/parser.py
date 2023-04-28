@@ -74,6 +74,26 @@ class InvalidSyntaxError(GenericParseError):
 
         super().__init__(msg)
 
+class UndefinedVariableError(GenericParseError):
+    """Interpreter error"""
+
+    NAME = 'UndefinedVariableError'
+
+    def __init__(self, var_name: str) -> None:
+        msg = f'Undefined variable: "{var_name}"'
+
+        super().__init__(msg)
+
+class UnexpectedVariableTypeError(GenericParseError):
+    """Interpreter error"""
+
+    NAME = 'UnexpectedVariableTypeError'
+
+    def __init__(self, expected_type: str, var_name: str) -> None:
+        msg = f'Unexpected variable type, expected {expected_type} of variable "{var_name}"'
+
+        super().__init__(msg)
+
 class Lexer:
     """Tokenize the sentence"""
 
@@ -217,6 +237,8 @@ class DotNode(GenericNode):
         return f"[{self.dot_x},{self.dot_y}]"
 
 class DefineNode(GenericNode):
+    """Define node of AST"""
+
     def __init__(self, name: Token, value: GenericNode) -> None:
         self.name = name
         self.value = value
@@ -390,8 +412,45 @@ class NumericValue(GenericValue):
     def __init__(self, value: GenericNode) -> None:
         self.value = value
 
-    def mul(self, value):
-        print(value, '*', value)
+    def get_value(self, interpreter: 'Interpreter'):
+        """Get the value of dot"""
+        return self._visit(self.value, interpreter)
+
+    def _visit(self, node: GenericNode, interpreter: 'Interpreter'):
+        if isinstance(node, NumberNode):
+            return node.token.value
+        if isinstance(node, VariableNode):
+            if node.token.value not in interpreter.vars:
+                raise UndefinedVariableError(str(node.token.value))
+
+            value = interpreter.vars[node.token.value]
+
+            if not isinstance(value, NumericValue):
+                raise UnexpectedVariableTypeError('NumericValue', str(node.token.value))
+
+            return value.get_value(interpreter)
+        if isinstance(node, BinaryOperatorNode):
+            left_value = self._visit(node.left_node, interpreter)
+            right_value = self._visit(node.right_node, interpreter)
+
+            if node.operator.type == TT_PLUS:
+                return left_value + right_value
+            if node.operator.type == TT_MINUS:
+                return left_value - right_value
+            if node.operator.type == TT_MUL:
+                return left_value * right_value
+            if node.operator.type == TT_DIV:
+                return left_value / right_value
+            if node.operator.type == TT_POWER:
+                return left_value ** right_value
+        if isinstance(node, UnaryOperatorNode):
+            if node.operator.type == TT_PLUS:
+                return self._visit(node.node, interpreter)
+            if node.operator.type == TT_MINUS:
+                return -self._visit(node.node, interpreter)
+
+    def __str__(self) -> str:
+        return f"<{self.value}>"
 
 class DotValue(GenericValue):
     """Crate a dot"""
@@ -399,6 +458,14 @@ class DotValue(GenericValue):
     def __init__(self, dot_x: NumericValue, dot_y: NumericValue) -> None:
         self.dot_x = dot_x
         self.dot_y = dot_y
+
+    def get_value(self, interpreter: 'Interpreter') -> tuple[int|float, int|float]:
+        """Get the value of dot"""
+
+        return self.dot_x.get_value(interpreter), self.dot_y.get_value(interpreter)
+
+    def __str__(self) -> str:
+        return f"({self.dot_x!s}, {self.dot_y!s})"
 
 class Interpreter:
     """interpret AST to parser the math sentences"""
@@ -408,33 +475,28 @@ class Interpreter:
     def __init__(self) -> None:
         self.vars: dict = {self.NO_NAME_VARNAME: []}
 
-    def visit(self, ast) -> GenericValue | None:
-        """Parse the ast and returns values, if exists"""
+    def visit(self, ast) -> GenericValue:
+        """Parse the ast and returns values"""
 
-        if isinstance(ast, NumberNode):
-            return NumericValue(ast)
-        elif isinstance(ast, VariableNode):
-            print('Variable', ast.token)
-        elif isinstance(ast, BinaryOperatorNode):
-            print('BinaryOperator', ast.left_node, ast.operator, ast.right_node)
-        elif isinstance(ast, UnaryOperatorNode):
-            value = NumericValue(ast.node)
-            if ast.operator.value == TT_MINUS:
-                value.mul(-1)
-            return value
-        elif isinstance(ast, DotNode):
+        if isinstance(ast, DotNode):
             return DotValue(NumericValue(ast.dot_x), NumericValue(ast.dot_y))
-        elif isinstance(ast, DefineNode):
+
+        if isinstance(ast, DefineNode):
             value = self.visit(ast.value)
             self.vars[ast.name.value] = value
             return value
 
-    def parse_ast(self, ast):
+        return NumericValue(ast)
+
+    def parse_ast(self, ast) -> None:
         """Parse the ast, but it doesn't return"""
 
-        self.visit(ast)
+        value = self.visit(ast)
 
-    def clear(self):
+        if isinstance(ast, DotNode):
+            self.vars[self.NO_NAME_VARNAME].append(value)
+
+    def clear(self) -> None:
         """Clear variables"""
 
-        self.vars = {}
+        self.vars = {self.NO_NAME_VARNAME: []}

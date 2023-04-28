@@ -1,13 +1,80 @@
 """This script creates a screen to graph some simple math sentences"""
 
 import pygame
-from .sentences import Universe
+from . import sentences
+from . import parser
+
+class DrawGraph:
+    """Class to draw the universe"""
+
+    GRID_SIZE = 5
+
+    def __init__(self, canvas: pygame.Surface, universe: sentences.Universe, \
+                 graph_position: pygame.Vector2, graph_scale: float) -> None:
+        self.canvas = canvas
+        self.universe = universe
+        self.graph_position = graph_position
+        self.graph_scale = graph_scale
+
+    def draw_grid(self, canvas_position: pygame.Rect|tuple):
+        """Draw the grid"""
+        canvas_x, canvas_y, width, height = canvas_position
+
+        pygame.draw.rect(self.canvas, 'white', canvas_position)
+
+        grid_size = int(self.GRID_SIZE * self.graph_scale)
+        origin_position = -self.graph_position * self.graph_scale
+        origin_position.x, origin_position.y = int(origin_position.x), int(origin_position.y)
+
+        for grid_x in range(int(origin_position.x) % grid_size, canvas_x+width, grid_size):
+            if grid_x == origin_position.x:
+                pygame.draw.line(self.canvas, 'black', (grid_x, canvas_y), \
+                                 (grid_x, canvas_y+height), 2)
+            else:
+                pygame.draw.line(self.canvas, 'gray', (grid_x, canvas_y), (grid_x, canvas_y+height))
+
+        for grid_y in range(int(origin_position.y) % grid_size, canvas_y + height, grid_size):
+            if grid_y == origin_position.y:
+                pygame.draw.line(self.canvas, 'black', (canvas_x, grid_y), \
+                                 (canvas_x + width, grid_y), 2)
+            else:
+                pygame.draw.line(self.canvas, 'gray', (canvas_x, grid_y), (canvas_x+width, grid_y))
+
+    def draw(self, canvas_position: pygame.Rect|tuple, graph_scale: float):
+        """Draw the elements in canvas"""
+
+        self.graph_scale = graph_scale
+
+        self.draw_grid(canvas_position)
+
+        for name, value in self.universe.interpreter.vars.items():
+            if name == self.universe.interpreter.NO_NAME_VARNAME:
+                for value_without_name in value:
+                    if isinstance(value_without_name, parser.DotValue):
+                        self._draw_point(value_without_name, canvas_position)
+            else:
+                if isinstance(value, parser.DotValue):
+                    self._draw_point(value, canvas_position)
+
+    def _draw_point(self, variable: parser.DotValue, canvas_position: pygame.Rect|tuple):
+        try:
+            dot_x, dot_y = variable.get_value(self.universe.interpreter)
+        except (parser.UndefinedVariableError, parser.UnexpectedVariableTypeError) as error:
+            print(error)
+            return
+
+        canvas_x, canvas_y, width, height = canvas_position
+
+        if 0 < (dot_x- self.graph_position.x) * self.graph_scale - canvas_x < width and \
+            0 < -(dot_y+self.graph_position.y) * self.graph_scale - canvas_y < height:
+            pygame.draw.circle(self.canvas, 'red', \
+                (((dot_x,-dot_y) - self.graph_position) * self.graph_scale), 4)
+
 
 class Screen:
     """The screen instance, used to manage the pygame canvas"""
 
     FPS = 30
-    GRID_SIZE = 5
 
     def __init__(self, width: int, height: int):
         pygame.init()
@@ -21,7 +88,7 @@ class Screen:
 
         self.running: bool = False
 
-        self.universe: Universe = Universe()
+        self.universe: sentences.Universe = sentences.Universe()
 
         self.graph_scale: float = 20
         self.graph_position: pygame.Vector2 = pygame.Vector2(-width / 2 - 200, -height / 2) \
@@ -29,6 +96,9 @@ class Screen:
 
         self.sentence_cursor_pos: int = 0
         self.dragging = None
+
+        self.draw_universe: DrawGraph = DrawGraph(self.canvas, self.universe, \
+                                                        self.graph_position, self.graph_scale)
 
     def __repr__(self) -> str:
         cls = self.__class__
@@ -210,22 +280,4 @@ class Screen:
 
 
     def _draw_graph(self, rect: pygame.Rect):
-        pygame.draw.rect(self.canvas, 'white', rect)
-
-        grid_size = int(self.GRID_SIZE * self.graph_scale)
-        origin_position = -self.graph_position * self.graph_scale
-        origin_position.x, origin_position.y = int(origin_position.x), int(origin_position.y)
-
-        for grid_x in range(int(origin_position.x) % grid_size, rect.right, grid_size):
-            if grid_x == origin_position.x:
-                pygame.draw.line(self.canvas, 'black', (grid_x, rect.top), (grid_x, rect.bottom), 2)
-            else:
-                pygame.draw.line(self.canvas, 'gray', (grid_x, rect.top), (grid_x, rect.bottom))
-
-        for grid_y in range(int(origin_position.y) % grid_size, rect.bottom, grid_size):
-            if grid_y == origin_position.y:
-                pygame.draw.line(self.canvas, 'black', (rect.left, grid_y), (rect.right, grid_y), 2)
-            else:
-                pygame.draw.line(self.canvas, 'gray', (rect.left, grid_y), (rect.right, grid_y))
-
-        self.universe.draw(self.canvas, rect, self.graph_position, self.graph_scale)
+        self.draw_universe.draw(rect, self.graph_scale)
