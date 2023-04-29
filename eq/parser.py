@@ -1,6 +1,6 @@
 """Parser of sentences (not working yet)"""
 
-from typing import List
+from typing import Tuple, Iterator, Union, Generator
 
 DIGITS = '0123456789'
 ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
@@ -56,16 +56,17 @@ class IllegalCharError(GenericParseError):
 
     NAME = 'IllegalCharError'
 
-    def __init__(self, msg: str, index: int) -> None:
+    def __init__(self, char: str, index: int) -> None:
         self.index = index
-        super().__init__(f'{msg} in {self.index}')
+        self.char = char
+        super().__init__(f"Unexpected char: '{char}' in {self.index}")
 
 class InvalidSyntaxError(GenericParseError):
     """Illegal char error"""
 
     NAME = 'InvalidSyntaxError'
 
-    def __init__(self, msg: str, token: Token|None) -> None:
+    def __init__(self, msg: str, token: Union[Token, None]) -> None:
         self.token = token
 
         if token is not None:
@@ -104,6 +105,18 @@ class InternalInterpreterError(GenericParseError):
 class Lexer:
     """Tokenize the sentence"""
 
+    TOKENS_TYPES = {
+        '+': TT_PLUS,
+        '-': TT_MINUS,
+        '*': TT_MUL,
+        '/': TT_DIV,
+        '(': TT_LPAREN,
+        ')': TT_RPAREN,
+        ',': TT_SEP,
+        '^': TT_POWER,
+        ':': TT_DEF
+    }
+
     def __init__(self, sentence) -> None:
         self.sentence = sentence
         self.index = -1
@@ -119,45 +132,27 @@ class Lexer:
         else:
             self.current_char = None
 
-    def make_tokens(self):
+    def make_tokens(self) -> Generator[Token, None, None]:
         """Get all tokens of sentence"""
-
-        tokens = []
 
         while self.current_char is not None:
             if self.current_char in DIGITS:
-                tokens.append(self.make_numbers())
-                continue
+                yield self.make_numbers()
 
-            if self.current_char.lower() in ALPHABET:
-                tokens.append(self.make_var())
-                continue
+            elif self.current_char.lower() in ALPHABET:
+                yield self.make_var()
 
-            if self.current_char == '+':
-                tokens.append(Token(TT_PLUS, self.index))
-            elif self.current_char == '-':
-                tokens.append(Token(TT_MINUS, self.index))
-            elif self.current_char == '*':
-                tokens.append(Token(TT_MUL, self.index))
-            elif self.current_char == '/':
-                tokens.append(Token(TT_DIV, self.index))
-            elif self.current_char == '(':
-                tokens.append(Token(TT_LPAREN, self.index))
-            elif self.current_char == ')':
-                tokens.append(Token(TT_RPAREN, self.index))
-            elif self.current_char == ',':
-                tokens.append(Token(TT_SEP, self.index))
-            elif self.current_char == '^':
-                tokens.append(Token(TT_POWER, self.index))
-            elif self.current_char == ':':
-                tokens.append(Token(TT_DEF, self.index))
-            elif self.current_char != ' ':
-                raise IllegalCharError(f"Unexpected char: '{self.current_char}'", index=self.index)
+            elif self.current_char in self.TOKENS_TYPES:
+                yield Token(self.TOKENS_TYPES[self.current_char], self.index)
+                self.advance()
 
-            self.advance()
+            elif self.current_char == ' ':
+                self.advance()
 
-        tokens.append(Token(TT_EOF, self.index))
-        return tokens
+            else:
+                raise IllegalCharError(self.current_char, index=self.index)
+
+        yield Token(TT_EOF, self.index)
 
     def make_numbers(self):
         """Create number token (INT and FLOAT)"""
@@ -255,8 +250,8 @@ class DefineNode(GenericNode):
 
 class Parser:
     """Create AST to parser the math sentences"""
-    def __init__(self, tokens: List[Token]) -> None:
-        self.tokens = tokens
+    def __init__(self, tokens: Iterator[Token]) -> None:
+        self.tokens = list(tokens)
         self.index = -1
         self.current_token = None
         self.advance()
@@ -444,22 +439,26 @@ class NumericValue(GenericValue):
             right_value = self._visit(node.right_node, interpreter)
 
             if node.operator.type == TT_PLUS:
-                return left_value + right_value
-            if node.operator.type == TT_MINUS:
-                return left_value - right_value
-            if node.operator.type == TT_MUL:
-                return left_value * right_value
-            if node.operator.type == TT_DIV:
-                return left_value / right_value
-            if node.operator.type == TT_POWER:
-                return left_value ** right_value
+                value = left_value + right_value
+            elif node.operator.type == TT_MINUS:
+                value = left_value - right_value
+            elif node.operator.type == TT_MUL:
+                value = left_value * right_value
+            elif node.operator.type == TT_DIV:
+                value = left_value / right_value
+            elif node.operator.type == TT_POWER:
+                value = left_value ** right_value
+            else:
+                raise InternalInterpreterError("Unexpected node operator type")
+
+            return value
 
         if isinstance(node, UnaryOperatorNode):
-            if node.operator.type == TT_PLUS:
-                value = self._visit(node.node, interpreter)
-            elif node.operator.type == TT_MINUS:
-                value = -self._visit(node.node, interpreter)
-            else:
+            value = self._visit(node.node, interpreter)
+
+            if node.operator.type == TT_MINUS:
+                value *= -1
+            elif node.operator.type != TT_PLUS:
                 raise InternalInterpreterError("Unexpected node operator type")
 
             return value
@@ -476,7 +475,7 @@ class DotValue(GenericValue):
         self.dot_x = dot_x
         self.dot_y = dot_y
 
-    def get_value(self, interpreter: 'Interpreter') -> tuple[int|float, int|float]:
+    def get_value(self, interpreter: 'Interpreter') -> Tuple[Union[int,float], Union[int,float]]:
         """Get the value of dot"""
 
         return self.dot_x.get_value(interpreter), self.dot_y.get_value(interpreter)

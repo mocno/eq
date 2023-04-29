@@ -1,5 +1,6 @@
 """This script creates a screen to graph some simple math sentences"""
 
+from typing import Union, Tuple
 import pygame
 from . import sentences
 from . import parser
@@ -7,7 +8,7 @@ from . import parser
 class DrawGraph:
     """Class to draw the universe"""
 
-    GRID_SIZE = 5
+    GRID_SIZE = 1
 
     def __init__(self, canvas: pygame.Surface, universe: sentences.Universe, \
                  graph_position: pygame.Vector2, graph_scale: float) -> None:
@@ -16,7 +17,7 @@ class DrawGraph:
         self.graph_position = graph_position
         self.graph_scale = graph_scale
 
-    def draw_grid(self, canvas_position: pygame.Rect|tuple):
+    def draw_grid(self, canvas_position: Union[pygame.Rect, Tuple]):
         """Draw the grid"""
         canvas_x, canvas_y, width, height = canvas_position
 
@@ -56,7 +57,7 @@ class DrawGraph:
                 if isinstance(value, parser.DotValue):
                     self._draw_point(value, canvas_position)
 
-    def _draw_point(self, variable: parser.DotValue, canvas_position: pygame.Rect|tuple):
+    def _draw_point(self, variable: parser.DotValue, canvas_position: Union[pygame.Rect, Tuple]):
         try:
             dot_x, dot_y = variable.get_value(self.universe.interpreter)
         except (parser.UndefinedVariableError, parser.UnexpectedVariableTypeError) as error:
@@ -90,7 +91,7 @@ class Screen:
 
         self.universe: sentences.Universe = sentences.Universe()
 
-        self.graph_scale: float = 20
+        self.graph_scale: float = 100
         self.graph_position: pygame.Vector2 = pygame.Vector2(-width / 2 - 200, -height / 2) \
             / self.graph_scale
 
@@ -124,7 +125,7 @@ class Screen:
 
             elif event.type == pygame.constants.MOUSEWHEEL:
                 new_scale = self.graph_scale + event.y * self.graph_scale / 10
-                if 100 > new_scale > 5:
+                if 150 > new_scale > 10:
                     self.graph_scale = new_scale
 
             elif event.type == pygame.constants.MOUSEBUTTONDOWN:

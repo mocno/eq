@@ -1,10 +1,9 @@
 """This script handle the sentences and the parsers"""
 
-import re
 from typing import TypedDict, List, Union
 from . import parser
 
-ErrorData = TypedDict('Point2D', position=int, length=int, msg=str)
+ErrorData = TypedDict('ErrorData', position=int, length=int, msg=str)
 
 class Sentence:
     """Some mathematical sentence, this instance parses and graphs it"""
@@ -58,19 +57,8 @@ class Sentence:
                 lexer = parser.Lexer(self.sentence)
 
                 try:
-                    tokens = lexer.make_tokens()
-                except parser.IllegalCharError as error:
-                    self.error_data = ErrorData(
-                        position=error.index,
-                        length=1,
-                        msg=str(error)
-                    )
-
-                    print(self.error_data)
-                    return
-
-                try:
-                    parsed = parser.Parser(tokens)
+                    gen_tokens = lexer.make_tokens()
+                    parsed = parser.Parser(gen_tokens)
                     ast = parsed.parse_sentence()
                 except parser.InvalidSyntaxError as error:
                     if error.token is not None:
@@ -81,6 +69,15 @@ class Sentence:
                         )
                     else:
                         self.error_data = True
+
+                    print(self.error_data)
+                    return
+                except parser.IllegalCharError as error:
+                    self.error_data = ErrorData(
+                        position=error.index,
+                        length=1,
+                        msg=str(error)
+                    )
 
                     print(self.error_data)
                     return
@@ -112,7 +109,6 @@ class Universe:
         """Get selected sentence."""
 
         return self.sentences[self.selected]
-
 
     def pop_selected(self):
         """Pop the selected sentence, if it only have one sentence nothing happens"""
