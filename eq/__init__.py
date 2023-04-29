@@ -11,40 +11,42 @@ class DrawGraph:
     GRID_SIZE = 1
 
     def __init__(self, canvas: pygame.Surface, universe: sentences.Universe, \
-                 graph_position: pygame.Vector2, graph_scale: float) -> None:
+                 origin: pygame.Vector2, scale: float) -> None:
         self.canvas = canvas
         self.universe = universe
-        self.graph_position = graph_position
-        self.graph_scale = graph_scale
+        self.origin = origin
+        self.scale = scale
 
-    def draw_grid(self, canvas_position: Union[pygame.Rect, Tuple]):
+    def draw_grid(self, canvas_position: Tuple[int, int, int, int]):
         """Draw the grid"""
         canvas_x, canvas_y, width, height = canvas_position
 
         pygame.draw.rect(self.canvas, 'white', canvas_position)
 
-        grid_size = int(self.GRID_SIZE * self.graph_scale)
-        origin_position = -self.graph_position * self.graph_scale
-        origin_position.x, origin_position.y = int(origin_position.x), int(origin_position.y)
+        grid_size = int(self.GRID_SIZE * self.scale)
+        origin_x, origin_y = int(self.origin.x), int(self.origin.y)
 
-        for grid_x in range(int(origin_position.x) % grid_size, canvas_x+width, grid_size):
-            if grid_x == origin_position.x:
+        for grid_x in range(origin_x % grid_size, canvas_x+width, grid_size):
+            if grid_x == origin_x:
                 pygame.draw.line(self.canvas, 'black', (grid_x, canvas_y), \
                                  (grid_x, canvas_y+height), 2)
             else:
                 pygame.draw.line(self.canvas, 'gray', (grid_x, canvas_y), (grid_x, canvas_y+height))
 
-        for grid_y in range(int(origin_position.y) % grid_size, canvas_y + height, grid_size):
-            if grid_y == origin_position.y:
+        for grid_y in range(origin_y % grid_size, canvas_y + height, grid_size):
+            if grid_y == origin_y:
                 pygame.draw.line(self.canvas, 'black', (canvas_x, grid_y), \
                                  (canvas_x + width, grid_y), 2)
             else:
                 pygame.draw.line(self.canvas, 'gray', (canvas_x, grid_y), (canvas_x+width, grid_y))
 
-    def draw(self, canvas_position: pygame.Rect|tuple, graph_scale: float):
-        """Draw the elements in canvas"""
 
-        self.graph_scale = graph_scale
+    def add_position(self, delta: pygame.Vector2):
+        """Add value of graph position"""
+        self.origin += delta
+
+    def draw(self, canvas_position: Tuple[int, int, int, int]):
+        """Draw the elements in canvas"""
 
         self.draw_grid(canvas_position)
 
@@ -57,19 +59,20 @@ class DrawGraph:
                 if isinstance(value, parser.DotValue):
                     self._draw_point(value, canvas_position)
 
-    def _draw_point(self, variable: parser.DotValue, canvas_position: Union[pygame.Rect, Tuple]):
+    def _draw_point(self, variable: parser.DotValue, canvas_position: Tuple[int, int, int, int]):
         try:
-            dot_x, dot_y = variable.get_value(self.universe.interpreter)
+            dot = variable.get_value(self.universe.interpreter)
         except (parser.UndefinedVariableError, parser.UnexpectedVariableTypeError) as error:
             print(error)
             return
 
         canvas_x, canvas_y, width, height = canvas_position
 
-        if 0 < (dot_x- self.graph_position.x) * self.graph_scale - canvas_x < width and \
-            0 < -(dot_y+self.graph_position.y) * self.graph_scale - canvas_y < height:
-            pygame.draw.circle(self.canvas, 'red', \
-                (((dot_x,-dot_y) - self.graph_position) * self.graph_scale), 4)
+        dot = pygame.Vector2(dot[0],-dot[1])
+        dot = dot * self.scale + self.origin
+
+        if 0 < dot.x -canvas_x < width and 0 < dot.y -canvas_y < height:
+            pygame.draw.circle(self.canvas, 'red', dot, 4)
 
 
 class Screen:
@@ -84,6 +87,7 @@ class Screen:
 
         self.canvas: pygame.Surface = pygame.display.set_mode((width, height), \
                                                               pygame.constants.RESIZABLE)
+
         self.clock = pygame.time.Clock()
         self.font: pygame.font.Font = pygame.font.SysFont('mono', 30)
 
@@ -91,15 +95,11 @@ class Screen:
 
         self.universe: sentences.Universe = sentences.Universe()
 
-        self.graph_scale: float = 100
-        self.graph_position: pygame.Vector2 = pygame.Vector2(-width / 2 - 200, -height / 2) \
-            / self.graph_scale
-
         self.sentence_cursor_pos: int = 0
         self.dragging = None
 
-        self.draw_universe: DrawGraph = DrawGraph(self.canvas, self.universe, \
-                                                        self.graph_position, self.graph_scale)
+        origin = pygame.Vector2(width / 2, height / 2)
+        self.draw_universe: DrawGraph = DrawGraph(self.canvas, self.universe, origin, 100)
 
     def __repr__(self) -> str:
         cls = self.__class__
@@ -124,9 +124,10 @@ class Screen:
                 self.on_keydown(event)
 
             elif event.type == pygame.constants.MOUSEWHEEL:
-                new_scale = self.graph_scale + event.y * self.graph_scale / 10
+                new_scale = self.draw_universe.scale * (event.y / 10 + 1)
+
                 if 150 > new_scale > 10:
-                    self.graph_scale = new_scale
+                    self.draw_universe.scale = new_scale
 
             elif event.type == pygame.constants.MOUSEBUTTONDOWN:
                 if event.button == 1:
@@ -138,11 +139,9 @@ class Screen:
 
             elif event.type == pygame.constants.MOUSEMOTION:
                 if self.dragging is not None:
-                    self.graph_position += (
-                        (self.dragging['last_pos'][0] - event.pos[0]) / self.graph_scale,
-                        (self.dragging['last_pos'][1] - event.pos[1]) / self.graph_scale
-                    )
-                    self.dragging['last_pos'] = event.pos
+                    new_position = pygame.Vector2(event.pos[0], event.pos[1])
+                    self.draw_universe.add_position(new_position - self.dragging['last_pos'])
+                    self.dragging['last_pos'] = new_position
 
     def on_keydown(self, event):
         """Handle keydown events"""
@@ -237,23 +236,21 @@ class Screen:
 
         self.canvas.fill('white')
 
-        self._draw_graph(pygame.Rect(0, 0, window_width, window_height))
-        self._draw_sentences_tab((0, 0, sentence_tab_width, window_height))
+        self.draw_universe.draw((0, 0, window_width, window_height))
+        self._draw_sentences_tab(pygame.Rect(0, 0, sentence_tab_width, window_height))
 
         pygame.display.update()
         pygame.display.flip()
 
-    def _draw_sentences_tab(self, rect):
-        tab_x, tab_y, width, height = rect
+    def _draw_sentences_tab(self, tab: pygame.Rect):
+        pygame.draw.rect(self.canvas, 'black', tab)
+        pygame.draw.rect(self.canvas, 'white', (tab.x +2, tab.y +2, tab.width -4, tab.height -4))
 
-        pygame.draw.rect(self.canvas, 'black', rect)
-        pygame.draw.rect(self.canvas, 'white', (tab_x +2, tab_y +2, width -4, height -4))
-
-        pygame.draw.rect(self.canvas, 'gray', (10, tab_y + 40 * self.universe.selected + 20, 5, 30))
+        pygame.draw.rect(self.canvas, 'gray', (10, tab.y + 40 * self.universe.selected + 20, 5, 30))
 
         before_cursor_content = str(self.universe.get_selected())[:self.sentence_cursor_pos]
         cursor_pos = self.font.render(before_cursor_content, False, 'black').get_width()
-        cursor_position = (cursor_pos +20, tab_y + 40 * self.universe.selected + 20, 2, 30)
+        cursor_position = (cursor_pos +20, tab.y + 40 * self.universe.selected + 20, 2, 30)
         pygame.draw.rect(self.canvas, 'gray', cursor_position)
 
         for index, sentence in enumerate(self.universe):
@@ -271,15 +268,11 @@ class Screen:
                     ]
                     error_width = self.font.render(error_content, False, 'black').get_width()
 
-                    error_position = (error_x +20, tab_y + 40 * index + 52, error_width, 3)
+                    error_position = (error_x +20, tab.y + 40 * index + 52, error_width, 3)
                 else:
-                    error_position = (7, tab_y + 40 * index + 20, 2, 30)
+                    error_position = (7, tab.y + 40 * index + 20, 2, 30)
 
                 pygame.draw.rect(self.canvas, 'red', error_position)
 
             text = self.font.render(text, True, 'black')
-            self.canvas.blit(text, (tab_x + 20, tab_y + 40 * index + 20))
-
-
-    def _draw_graph(self, rect: pygame.Rect):
-        self.draw_universe.draw(rect, self.graph_scale)
+            self.canvas.blit(text, (tab.x + 20, tab.y + 40 * index + 20))
