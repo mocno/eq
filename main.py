@@ -1,5 +1,6 @@
-"""This script generate the screen of """
+"""This script generate the screen of eq"""
 
 import eq
 
-eq.Screen(1000, 1200).start()
+screen = eq.Screen(1000, 1200)
+screen.start()
