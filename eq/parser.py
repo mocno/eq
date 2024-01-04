@@ -1,6 +1,8 @@
 """Parser of sentences (not working yet)"""
 
-from typing import Tuple, Iterator, Union, Generator
+from typing import Generator, Iterator, Tuple, TypedDict, Union
+
+ErrorData = TypedDict('ErrorData', position=int, length=int, msg=str)
 
 DIGITS = '0123456789'
 ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
@@ -51,6 +53,10 @@ class GenericParseError(Exception):
             msg = f'{self.NAME}: {msg}'
         super().__init__(msg)
 
+    def get_error_data(self):
+        """Generate the error data"""
+        return True
+
 class IllegalCharError(GenericParseError):
     """Illegal char error"""
 
@@ -60,6 +66,16 @@ class IllegalCharError(GenericParseError):
         self.index = index
         self.char = char
         super().__init__(f"Unexpected char: '{char}' in {self.index}")
+
+
+    def get_error_data(self):
+        """Generate the error data"""
+
+        return ErrorData(
+            position=self.index,
+            length=1,
+            msg=str(self)
+        )
 
 class InvalidSyntaxError(GenericParseError):
     """Illegal char error"""
@@ -76,6 +92,38 @@ class InvalidSyntaxError(GenericParseError):
                 msg += f', length: {token.length}'
 
         super().__init__(msg)
+
+    def get_error_data(self):
+        """Generate the error data"""
+
+        if self.token is None:
+            return True
+
+        return ErrorData(
+            position=self.token.position,
+            length=self.token.length,
+            msg=str(self)
+        )
+
+class ReservedVariableNameError(GenericParseError):
+    """Interpreter error"""
+
+    NAME = 'ReservedVariableNameError'
+
+    def __init__(self, variable_name: str, token: Token) -> None:
+        self.token = token
+        msg = f'Reserved variable name: {variable_name}'
+
+        super().__init__(msg)
+
+    def get_error_data(self):
+        """Generate the error data"""
+
+        return ErrorData(
+            position=self.token.position,
+            length=self.token.length,
+            msg=str(self)
+        )
 
 class UndefinedVariableError(GenericParseError):
     """Interpreter error"""
@@ -487,6 +535,7 @@ class Interpreter:
     """interpret AST to parser the math sentences"""
 
     NO_NAME_VARNAME = '__@no name@__'
+    RESERVED_VARIABLE_NAMES = ('x', 'y')
 
     def __init__(self) -> None:
         self.vars: dict = {self.NO_NAME_VARNAME: []}
@@ -498,8 +547,13 @@ class Interpreter:
             return DotValue(NumericValue(ast.dot_x), NumericValue(ast.dot_y))
 
         if isinstance(ast, DefineNode):
+            variable_name = str(ast.name.value)
+
+            if variable_name in self.RESERVED_VARIABLE_NAMES:
+                raise ReservedVariableNameError(variable_name, ast.name)
+
             value = self.visit(ast.value)
-            self.vars[ast.name.value] = value
+            self.vars[variable_name] = value
             return value
 
         return NumericValue(ast)

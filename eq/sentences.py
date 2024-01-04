@@ -1,9 +1,7 @@
 """This script handle the sentences and the parsers"""
 
-from typing import TypedDict, List, Union
+from typing import List, Union
 from . import parser
-
-ErrorData = TypedDict('ErrorData', position=int, length=int, msg=str)
 
 class Sentence:
     """Some mathematical sentence, this instance parses and graphs it"""
@@ -13,7 +11,7 @@ class Sentence:
         self.ast: Union[parser.GenericNode, None] = None
         self.parsed = False
 
-        self.error_data: Union[ErrorData, bool] = False
+        self.error_data: Union[parser.ErrorData, bool] = False
 
     def __str__(self):
         return self.sentence
@@ -60,25 +58,8 @@ class Sentence:
                     gen_tokens = lexer.make_tokens()
                     parsed = parser.Parser(gen_tokens)
                     ast = parsed.parse_sentence()
-                except parser.InvalidSyntaxError as error:
-                    if error.token is not None:
-                        self.error_data = ErrorData(
-                            position=error.token.position,
-                            length=error.token.length,
-                            msg=str(error)
-                        )
-                    else:
-                        self.error_data = True
-
-                    print(self.error_data)
-                    return
-                except parser.IllegalCharError as error:
-                    self.error_data = ErrorData(
-                        position=error.index,
-                        length=1,
-                        msg=str(error)
-                    )
-
+                except (parser.InvalidSyntaxError, parser.IllegalCharError) as error:
+                    self.error_data = error.get_error_data()
                     print(self.error_data)
                     return
 
@@ -153,4 +134,8 @@ class Universe:
         self.interpreter.clear()
         for sentence in self.sentences:
             if sentence.ast is not None:
-                self.interpreter.parse_ast(sentence.ast)
+                try:
+                    self.interpreter.parse_ast(sentence.ast)
+                except parser.ReservedVariableNameError as error:
+                    sentence.error_data = error.get_error_data()
+                    continue
