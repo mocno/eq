@@ -1,5 +1,5 @@
 # eq
-Graph visualization using pygame (pygame experiment)
+Graph visualization using pygame
 
 ![Image of application (v0.1.2)](/src/screen%20-%20v0.1.2.png)
 
