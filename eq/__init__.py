@@ -1,6 +1,6 @@
 """This script creates a screen to graph some simple math sentences"""
 
-from typing import Union, Tuple
+from typing import Tuple
 import pygame
 from . import sentences
 from . import parser
