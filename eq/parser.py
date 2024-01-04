@@ -1,4 +1,4 @@
-"""Parser of sentences (not working yet)"""
+"""Parser of sentences"""
 
 from typing import Generator, Iterator, Tuple, TypedDict, Union
 
